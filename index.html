@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>STOMPI Game</title>
+    <style>
+      body {
+        font-family: Comic Sans MS, sans-serif;
+        max-width: 700px;
+        margin: auto;
+        text-align: center;
+        background: linear-gradient(to bottom right, #f4f4f4, #e0f7fa);
+        padding: 20px;
+      }
+      h2 {
+        color: #00796b;
+        animation: pop 0.6s ease-in-out infinite alternate;
+      }
+      @keyframes pop {
+        0% { transform: scale(1); }
+        100% { transform: scale(1.05); }
+      }
+      .word-bank {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .word {
+        margin: 5px;
+        padding: 10px;
+        font-size: 16px;
+        border: none;
+        border-radius: 6px;
+        background-color: #fff176;
+        cursor: move;
+        transition: transform 0.2s;
+      }
+      .word:hover {
+        background-color: #ffd600;
+        transform: scale(1.1);
+      }
+      .constructed {
+        margin-top: 15px;
+        min-height: 60px;
+        font-size: 18px;
+        font-weight: bold;
+        border: 2px dashed #aaa;
+        padding: 10px;
+        background-color: #fff;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+      .feedback {
+        font-weight: bold;
+        margin: 10px;
+        color: #d32f2f;
+      }
+      .badge {
+        margin-top: 20px;
+        font-size: 20px;
+        color: #4caf50;
+      }
+      #score, #highscore, #timer {
+        font-size: 18px;
+        color: #004d40;
+        margin: 5px;
+      }
+      .mode-switcher {
+        margin-bottom: 20px;
+      }
+      .mode-switcher button {
+        margin: 5px;
+        padding: 8px;
+        border-radius: 5px;
+        border: none;
+        background-color: #b2dfdb;
+        cursor: pointer;
+      }
+      .mode-switcher button:hover {
+        background-color: #4db6ac;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🎮 STOMPI Speletjie + Taal Avontuur!</h2>
+    <p>Sleep die woorde in die regte volgorde 🎯<br><em>Hint in English: S - V1 - T - O - M - P - V2</em></p>
+
+    <div class="mode-switcher">
+      <strong>Kies Aktiwiteit:</strong><br>
+      <button onclick="setMode('stompi')">STOMPI</button>
+      <button onclick="setMode('woordsoorte')">Woordsoorte</button>
+    </div>
+
+    <div id="hint"></div>
+    <div class="word-bank" id="word-bank"></div>
+    <div class="constructed" id="constructed" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    <div class="feedback" id="feedback"></div>
+    <div id="score">Punte: 0</div>
+    <div id="highscore">Beste Punte: 0</div>
+    <div id="timer">⏰ Tyd oor: 60s</div>
+    <div class="badge" id="badge"></div>
+
+    <audio id="correctSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+    <audio id="wrongSound" src="https://actions.google.com/sounds/v1/cartoon/boing.ogg"></audio>
+    <audio id="badgeSound" src="https://actions.google.com/sounds/v1/cartoon/concussive_hit_guitar_boing.ogg"></audio>
+
+    <script>
+      const stompiSentences = [
+        { correct: ["Die", "kat", "het", "gister", "die muis", "in die kombuis", "gevang", "."], hint: "S - V1 - T - O - P - V2", options: ["Die", "kat", "het", "gister", "die muis", "in die kombuis", "gevang", "."] },
+        { correct: ["My", "ma", "sal", "môre", "lekkers", "met liefde", "in die klas", "uitdeel", "."], hint: "S - V1 - T - O - M - P - V2", options: ["My", "ma", "sal", "môre", "lekkers", "met liefde", "in die klas", "uitdeel", "."] },
+        { correct: ["Ons", "gaan", "vandag", "huiswerk", "met moeite", "by die tafel", "doen", "."], hint: "S - V1 - T - O - M - P - V2", options: ["Ons", "gaan", "vandag", "huiswerk", "met moeite", "by die tafel", "doen", "."] }
+      ];
+
+      const woordsoorte = [
+        { correct: ["Die", "groot", "man", "hardloop", "by", "die", "skool"], hint: "Soorte: lidwoord, byvoeglike, selfstandige, werkwoord, voorsetsel, lidwoord, selfstandige", options: ["Die", "groot", "man", "hardloop", "by", "die", "skool"] },
+        { correct: ["Ek", "gee", "my", "vriend", "n", "mooi", "geskenk"], hint: "Soorte: voornaamwoord, werkwoord, besitlik, selfstandige, lidwoord, byvoeglike, selfstandige", options: ["Ek", "gee", "my", "vriend", "n", "mooi", "geskenk"] }
+      ];
+
+      let mode = "stompi";
+      let currentSentenceIndex = 0;
+      let score = 0;
+      let highscore = localStorage.getItem("highscore") || 0;
+      let selectedWords = [];
+      let timer = 60;
+      let countdown;
+
+      document.getElementById("highscore").innerText = "Beste Punte: " + highscore;
+
+      function setMode(newMode) {
+        mode = newMode;
+        currentSentenceIndex = 0;
+        score = 0;
+        timer = 60;
+        document.getElementById("score").innerText = "Punte: 0";
+        document.getElementById("badge").innerText = "";
+        renderSentence();
+        startTimer();
+      }
+
+      function startTimer() {
+        clearInterval(countdown);
+        countdown = setInterval(() => {
+          timer--;
+          document.getElementById("timer").innerText = "⏰ Tyd oor: " + timer + "s";
+          if (timer <= 0) {
+            clearInterval(countdown);
+            document.getElementById("feedback").innerText = "⏳ Tyd verby! Jou finale punt: " + score;
+            if (score > highscore) {
+              localStorage.setItem("highscore", score);
+              document.getElementById("highscore").innerText = "Beste Punte: " + score;
+              document.getElementById("badge").innerText = "🏅 Nuwe Hoë Punte! Welgedaan!";
+              document.getElementById("badgeSound").play();
+            }
+          }
+        }, 1000);
+      }
+
+      function getCurrentSet() {
+        return mode === "stompi" ? stompiSentences : woordsoorte;
+      }
+
+      function shuffle(array) {
+        return array.sort(() => Math.random() - 0.5);
+      }
+
+      function renderSentence() {
+        const sentence = getCurrentSet()[currentSentenceIndex];
+        const container = document.getElementById("word-bank");
+        container.innerHTML = "";
+        selectedWords = [];
+        document.getElementById("constructed").innerHTML = "";
+        document.getElementById("hint").innerText = "💡 Wenkrag: " + sentence.hint;
+        shuffle(sentence.options).forEach(word => {
+          const btn = document.createElement("div");
+          btn.innerText = word;
+          btn.className = "word";
+          btn.draggable = true;
+          btn.ondragstart = (e) => drag(e, word);
+          container.appendChild(btn);
+        });
+      }
+
+      function drag(ev, word) {
+        ev.dataTransfer.setData("text", word);
+      }
+
+      function allowDrop(ev) {
+        ev.preventDefault();
+      }
+
+      function drop(ev) {
+        ev.preventDefault();
+        const word = ev.dataTransfer.getData("text");
+        selectedWords.push(word);
+        const span = document.createElement("span");
+        span.innerText = word + " ";
+        document.getElementById("constructed").appendChild(span);
+        if (selectedWords.length === getCurrentSet()[currentSentenceIndex].correct.length) {
+          checkAnswer();
+        }
+      }
+
+      function checkAnswer() {
+        const sentence = getCurrentSet()[currentSentenceIndex];
+        const correct = sentence.correct.join(" ");
+        const answer = selectedWords.join(" ");
+        const feedback = document.getElementById("feedback");
+        if (answer === correct) {
+          document.getElementById("correctSound").play();
+          feedback.innerText = "🎉 Reg gedoen! +1 punt!";
+          score++;
+          document.getElementById("score").innerText = "Punte: " + score;
+        } else {
+          document.getElementById("wrongSound").play();
+          feedback.innerText = "❌ O nee, dis nie reg nie. Probeer weer!";
+        }
+        setTimeout(() => {
+          selectedWords = [];
+          currentSentenceIndex = (currentSentenceIndex + 1) % getCurrentSet().length;
+          renderSentence();
+          feedback.innerText = "";
+        }, 2000);
+      }
+
+      setMode("stompi");
+    </script>
+  </body>
+</html>
